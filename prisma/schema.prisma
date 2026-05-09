@@ -1,0 +1,572 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// UTILISATEURS
+// ============================================================
+
+model users {
+  id                String   @id @default(uuid())
+  email             String?  @unique
+  phone             String?  @unique
+  password_hash     String
+  role              String   // buyer | seller | driver | admin
+  first_name        String?
+  last_name         String?
+  avatar_url        String?
+  is_verified       Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  is_suspended      Boolean  @default(false)
+  suspension_reason String?
+  phone_verified    Boolean  @default(false)
+  email_verified    Boolean  @default(false)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now())
+
+  // Relations
+  shops             shops[]
+  user_addresses    user_addresses[]
+  orders            orders[]         @relation("buyer_orders")
+  reviews           reviews[]        @relation("reviewer")
+  driver_reviews    driver_reviews[] @relation("driver_reviewer")
+  favorites         favorites[]
+  notifications     notifications[]
+  push_tokens       push_tokens[]
+  drivers           drivers[]
+  import_requests   import_requests[]
+  disputes          disputes[]       @relation("dispute_opener")
+  dispute_evidences dispute_evidences[]
+  wallet_admin      withdrawal_requests[] @relation("processed_by_admin")
+  import_handler    import_requests[] @relation("handled_by_admin")
+  conversations_a   conversations[]  @relation("participant_a_user")
+  conversations_b   conversations[]  @relation("participant_b_user")
+  messages          messages[]
+  resolved_disputes disputes[]       @relation("dispute_resolver")
+}
+
+model user_addresses {
+  id         String   @id @default(uuid())
+  user_id    String
+  label      String?
+  city       String?
+  district   String?
+  details    String?
+  latitude   Decimal? @db.Decimal(10, 7)
+  longitude  Decimal? @db.Decimal(10, 7)
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  users  users  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  orders orders[]
+}
+
+// ============================================================
+// BOUTIQUES
+// ============================================================
+
+model shops {
+  id                  String   @id @default(uuid())
+  owner_id            String
+  name                String
+  slug                String   @unique
+  description         String?
+  logo_url            String?
+  banner_url          String?
+  phone               String?
+  city                String?
+  district            String?
+  latitude            Decimal? @db.Decimal(10, 7)
+  longitude           Decimal? @db.Decimal(10, 7)
+  trust_level         String   @default("gray")
+  is_verified         Boolean  @default(false)
+  is_premium          Boolean  @default(false)
+  badge_top_seller    Boolean  @default(false)
+  badge_fast_delivery Boolean  @default(false)
+  badge_reliable      Boolean  @default(false)
+  total_sales         Int      @default(0)
+  average_rating      Decimal  @default(0) @db.Decimal(3, 2)
+  total_reviews       Int      @default(0)
+  commission_rate     Decimal  @default(7) @db.Decimal(5, 2)
+  is_active           Boolean  @default(true)
+  is_suspended        Boolean  @default(false)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @default(now())
+
+  users               users                @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  products            products[]
+  orders              orders[]
+  drivers             drivers[]
+  seller_wallets      seller_wallets?
+  wallet_transactions wallet_transactions[]
+  withdrawal_requests withdrawal_requests[]
+  reviews             reviews[]
+}
+
+// ============================================================
+// CATÉGORIES
+// ============================================================
+
+model categories {
+  id         String   @id @default(uuid())
+  parent_id  String?
+  name       String
+  slug       String   @unique
+  icon_url   String?
+  image_url  String?
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  parent   categories?  @relation("category_children", fields: [parent_id], references: [id], onDelete: SetNull)
+  children categories[] @relation("category_children")
+  products products[]
+}
+
+// ============================================================
+// PRODUITS
+// ============================================================
+
+model products {
+  id              String   @id @default(uuid())
+  shop_id         String
+  category_id     String?
+  name            String
+  slug            String   @unique
+  description     String?
+  price           Decimal  @db.Decimal(12, 2)
+  promo_price     Decimal? @db.Decimal(12, 2)
+  promo_ends_at   DateTime?
+  stock           Int      @default(0)
+  min_order_qty   Int      @default(1)
+  max_order_qty   Int?
+  weight_kg       Decimal? @db.Decimal(8, 3)
+  warranty_months Int      @default(0)
+  condition       String   @default("new")
+  is_imported     Boolean  @default(false)
+  origin_country  String?
+  average_rating  Decimal  @default(0) @db.Decimal(3, 2)
+  total_reviews   Int      @default(0)
+  total_sold      Int      @default(0)
+  view_count      Int      @default(0)
+  is_active       Boolean  @default(true)
+  is_featured     Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now())
+
+  shops            shops             @relation(fields: [shop_id], references: [id], onDelete: Cascade)
+  categories       categories?       @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  product_images   product_images[]
+  product_videos   product_videos[]
+  product_variants product_variants[]
+  order_items      order_items[]
+  reviews          reviews[]
+  favorites        favorites[]
+}
+
+model product_images {
+  id         String  @id @default(uuid())
+  product_id String
+  url        String
+  is_cover   Boolean @default(false)
+  sort_order Int     @default(0)
+
+  products products @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+
+model product_videos {
+  id         String  @id @default(uuid())
+  product_id String
+  url        String
+  thumbnail  String?
+
+  products products @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+
+model product_variants {
+  id            String  @id @default(uuid())
+  product_id    String
+  variant_name  String
+  variant_value String
+  extra_price   Decimal @default(0) @db.Decimal(12, 2)
+  stock         Int     @default(0)
+  sku           String?
+
+  products    products      @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  order_items order_items[]
+}
+
+// ============================================================
+// LIVREURS
+// ============================================================
+
+model drivers {
+  id                String    @id @default(uuid())
+  user_id           String
+  shop_id           String?
+  is_independent    Boolean   @default(false)
+  vehicle_type      String?
+  license_plate     String?
+  id_card_url       String?
+  is_available      Boolean   @default(true)
+  is_verified       Boolean   @default(false)
+  current_lat       Decimal?  @db.Decimal(10, 7)
+  current_lng       Decimal?  @db.Decimal(10, 7)
+  last_seen_at      DateTime?
+  average_rating    Decimal   @default(0) @db.Decimal(3, 2)
+  total_deliveries  Int       @default(0)
+  created_at        DateTime  @default(now())
+
+  users          users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  shops          shops?           @relation(fields: [shop_id], references: [id], onDelete: SetNull)
+  order_tracking order_tracking[]
+  driver_reviews driver_reviews[]
+}
+
+// ============================================================
+// COMMANDES
+// ============================================================
+
+model orders {
+  id                  String    @id @default(uuid())
+  buyer_id            String
+  shop_id             String
+  status              String    @default("pending")
+  delivery_address_id String?
+  delivery_notes      String?
+  subtotal            Decimal   @db.Decimal(12, 2)
+  delivery_fee        Decimal   @default(0) @db.Decimal(12, 2)
+  discount_amount     Decimal   @default(0) @db.Decimal(12, 2)
+  total_amount        Decimal   @db.Decimal(12, 2)
+  commission_amount   Decimal   @default(0) @db.Decimal(12, 2)
+  seller_amount       Decimal   @db.Decimal(12, 2)
+  delivery_code       String?
+  qr_code_url         String?
+  delivered_at        DateTime?
+  validated_at        DateTime?
+  cancelled_at        DateTime?
+  cancellation_reason String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now())
+
+  users           users           @relation("buyer_orders", fields: [buyer_id], references: [id])
+  shops           shops           @relation(fields: [shop_id], references: [id])
+  user_addresses  user_addresses? @relation(fields: [delivery_address_id], references: [id])
+  order_items     order_items[]
+  order_tracking  order_tracking[]
+  payments        payments[]
+  reviews         reviews[]
+  disputes        disputes[]
+  wallet_transactions wallet_transactions[]
+}
+
+model order_items {
+  id            String  @id @default(uuid())
+  order_id      String
+  product_id    String
+  variant_id    String?
+  quantity      Int
+  unit_price    Decimal @db.Decimal(12, 2)
+  total_price   Decimal @db.Decimal(12, 2)
+  product_name  String
+  product_image String?
+
+  orders           orders            @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  products         products          @relation(fields: [product_id], references: [id])
+  product_variants product_variants? @relation(fields: [variant_id], references: [id])
+}
+
+model order_tracking {
+  id         String   @id @default(uuid())
+  order_id   String
+  driver_id  String?
+  status     String
+  note       String?
+  latitude   Decimal? @db.Decimal(10, 7)
+  longitude  Decimal? @db.Decimal(10, 7)
+  created_at DateTime @default(now())
+
+  orders  orders   @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  drivers drivers? @relation(fields: [driver_id], references: [id])
+}
+
+// ============================================================
+// PAIEMENTS & ESCROW
+// ============================================================
+
+model payments {
+  id           String    @id @default(uuid())
+  order_id     String
+  buyer_id     String
+  amount       Decimal   @db.Decimal(12, 2)
+  currency     String    @default("XAF")
+  method       String
+  status       String    @default("pending")
+  external_ref String?
+  metadata     Json?
+  paid_at      DateTime?
+  created_at   DateTime  @default(now())
+
+  orders          orders            @relation(fields: [order_id], references: [id])
+  import_requests import_requests[]
+}
+
+model seller_wallets {
+  id                String   @id @default(uuid())
+  shop_id           String   @unique
+  balance_pending   Decimal  @default(0) @db.Decimal(14, 2)
+  balance_available Decimal  @default(0) @db.Decimal(14, 2)
+  balance_withdrawn Decimal  @default(0) @db.Decimal(14, 2)
+  updated_at        DateTime @default(now())
+
+  shops shops @relation(fields: [shop_id], references: [id], onDelete: Cascade)
+}
+
+model wallet_transactions {
+  id         String   @id @default(uuid())
+  shop_id    String
+  order_id   String?
+  type       String
+  amount     Decimal  @db.Decimal(14, 2)
+  note       String?
+  created_at DateTime @default(now())
+
+  shops  shops   @relation(fields: [shop_id], references: [id])
+  orders orders? @relation(fields: [order_id], references: [id])
+}
+
+model withdrawal_requests {
+  id             String    @id @default(uuid())
+  shop_id        String
+  amount         Decimal   @db.Decimal(14, 2)
+  method         String
+  account_number String
+  account_name   String?
+  status         String    @default("pending")
+  admin_note     String?
+  processed_by   String?
+  requested_at   DateTime  @default(now())
+  processed_at   DateTime?
+
+  shops      shops  @relation(fields: [shop_id], references: [id])
+  admin_user users? @relation("processed_by_admin", fields: [processed_by], references: [id])
+}
+
+// ============================================================
+// AVIS & NOTES
+// ============================================================
+
+model reviews {
+  id          String   @id @default(uuid())
+  order_id    String
+  product_id  String
+  reviewer_id String
+  shop_id     String
+  rating      Int
+  comment     String?
+  images      String[]
+  is_visible  Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  orders   orders   @relation(fields: [order_id], references: [id])
+  products products @relation(fields: [product_id], references: [id])
+  users    users    @relation("reviewer", fields: [reviewer_id], references: [id])
+  shops    shops    @relation(fields: [shop_id], references: [id])
+}
+
+model driver_reviews {
+  id          String   @id @default(uuid())
+  order_id    String
+  driver_id   String
+  reviewer_id String
+  rating      Int
+  comment     String?
+  created_at  DateTime @default(now())
+
+  drivers drivers @relation(fields: [driver_id], references: [id])
+  users   users   @relation("driver_reviewer", fields: [reviewer_id], references: [id])
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+
+model conversations {
+  id              String    @id @default(uuid())
+  order_id        String?
+  participant_a   String
+  participant_b   String
+  type            String    @default("buyer_seller")
+  last_message_at DateTime?
+  created_at      DateTime  @default(now())
+
+  users_conversations_participant_aTouser users    @relation("participant_a_user", fields: [participant_a], references: [id])
+  users_conversations_participant_bTouser users    @relation("participant_b_user", fields: [participant_b], references: [id])
+  messages                                messages[]
+}
+
+model messages {
+  id              String    @id @default(uuid())
+  conversation_id String
+  sender_id       String
+  content         String?
+  image_url       String?
+  is_read         Boolean   @default(false)
+  read_at         DateTime?
+  created_at      DateTime  @default(now())
+
+  conversations conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  users         users         @relation(fields: [sender_id], references: [id])
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model notifications {
+  id         String   @id @default(uuid())
+  user_id    String
+  type       String
+  title      String?
+  body       String?
+  data       Json?
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  users users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model push_tokens {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique
+  platform   String?
+  created_at DateTime @default(now())
+
+  users users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// IMPORTATION INTERNATIONALE
+// ============================================================
+
+model import_requests {
+  id              String    @id @default(uuid())
+  requester_id    String
+  description     String?
+  image_url       String?
+  product_url     String?
+  source_country  String    @default("Chine")
+  status          String    @default("pending")
+  estimated_price Decimal?  @db.Decimal(12, 2)
+  shipping_fee    Decimal?  @db.Decimal(12, 2)
+  customs_fee     Decimal?  @db.Decimal(12, 2)
+  total_quote     Decimal?  @db.Decimal(12, 2)
+  estimated_days  Int?
+  quote_expires_at DateTime?
+  quote_note      String?
+  tracking_number String?
+  tracking_carrier String?
+  payment_id      String?
+  admin_notes     String?
+  handled_by      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+
+  users                    users                    @relation(fields: [requester_id], references: [id])
+  admin_user               users?                   @relation("handled_by_admin", fields: [handled_by], references: [id])
+  payments                 payments?                @relation(fields: [payment_id], references: [id])
+  import_tracking_events   import_tracking_events[]
+}
+
+model import_tracking_events {
+  id          String   @id @default(uuid())
+  import_id   String
+  status      String
+  description String?
+  location    String?
+  created_at  DateTime @default(now())
+
+  import_requests import_requests @relation(fields: [import_id], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// LITIGES
+// ============================================================
+
+model disputes {
+  id          String    @id @default(uuid())
+  order_id    String
+  opened_by   String
+  reason      String
+  status      String    @default("open")
+  resolution  String?
+  resolved_by String?
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
+
+  orders     orders    @relation(fields: [order_id], references: [id])
+  users      users     @relation("dispute_opener", fields: [opened_by], references: [id])
+  resolver   users?    @relation("dispute_resolver", fields: [resolved_by], references: [id])
+  dispute_evidences dispute_evidences[]
+}
+
+model dispute_evidences {
+  id          String   @id @default(uuid())
+  dispute_id  String
+  uploaded_by String
+  file_url    String
+  description String?
+  created_at  DateTime @default(now())
+
+  disputes disputes @relation(fields: [dispute_id], references: [id], onDelete: Cascade)
+  users    users    @relation(fields: [uploaded_by], references: [id])
+}
+
+// ============================================================
+// PROMOTIONS & FAVORIS
+// ============================================================
+
+model promotions {
+  id             String    @id @default(uuid())
+  shop_id        String?
+  product_id     String?
+  code           String?   @unique
+  discount_type  String?
+  discount_value Decimal   @db.Decimal(10, 2)
+  min_order      Decimal   @default(0) @db.Decimal(12, 2)
+  max_uses       Int?
+  used_count     Int       @default(0)
+  starts_at      DateTime?
+  ends_at        DateTime?
+  is_active      Boolean   @default(true)
+  created_at     DateTime  @default(now())
+}
+
+model favorites {
+  id         String   @id @default(uuid())
+  user_id    String
+  product_id String
+  created_at DateTime @default(now())
+
+  users    users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  products products @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, product_id])
+}
+
+// ============================================================
+// CONFIGURATION ADMIN
+// ============================================================
+
+model platform_settings {
+  key        String   @id
+  value      String
+  description String?
+  updated_at DateTime @default(now())
+}
