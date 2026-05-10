@@ -29,13 +29,52 @@ dotenv.config();
 const app        = express();
 const httpServer = createServer(app);
 
+// CORS — accepte toutes les origines localhost + IP réseau
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://192.168.1.77:3000',
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Autoriser les requêtes sans origine (mobile, Postman)
+    if (!origin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.some((allowed) => {
+      if (typeof allowed === 'string') return allowed === origin;
+      if (allowed instanceof RegExp) return allowed.test(origin);
+      return false;
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(null, true); // En dev on accepte tout
+    }
+  },
+  credentials: true,
+  methods:     ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 export const io = new SocketServer(httpServer, {
-  cors: { origin: process.env.FRONTEND_URL, credentials: true },
+  cors: {
+    origin:      '*',
+    credentials: false,
+  },
 });
 setupSocketIO(io);
 
-app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Pre-flight pour toutes les routes
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
